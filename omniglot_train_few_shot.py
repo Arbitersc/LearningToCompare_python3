@@ -11,16 +11,16 @@ import argparse
 import random
 
 parser = argparse.ArgumentParser(description="One Shot Visual Recognition")
-parser.add_argument("-f", "--feature_dim", type = int, default = 64)
-parser.add_argument("-r", "--relation_dim", type = int, default = 8)
-parser.add_argument("-w", "--class_num", type = int, default = 5)
-parser.add_argument("-s", "--sample_num_per_class", type = int, default = 5)
-parser.add_argument("-b", "--batch_num_per_class", type = int, default = 15)
-parser.add_argument("-e", "--episode", type = int, default = 1000000)
-parser.add_argument("-t", "--test_episode", type = int, default = 1000)
-parser.add_argument("-l", "--learning_rate", type = float, default = 0.001)
-parser.add_argument("-g", "--gpu", type = int, default = 0)
-parser.add_argument("-u", "--hidden_unit", type = int, default = 10)
+parser.add_argument("-f", "--feature_dim", type=int, default=64)
+parser.add_argument("-r", "--relation_dim", type=int, default=8)
+parser.add_argument("-w", "--class_num", type=int, default=5)
+parser.add_argument("-s", "--sample_num_per_class", type=int, default=5)
+parser.add_argument("-b", "--batch_num_per_class", type=int, default=15)
+parser.add_argument("-e", "--episode", type=int, default=1000000)
+parser.add_argument("-t", "--test_episode", type=int, default=1000)
+parser.add_argument("-l", "--learning_rate", type=float, default=0.001)
+parser.add_argument("-g", "--gpu", type=int, default=0)
+parser.add_argument("-u", "--hidden_unit", type=int, default=10)
 args = parser.parse_args()
 
 #Hyper Parameters
@@ -34,3 +34,48 @@ TEST_EPISODE = args.test_episode
 LEARNING_RATE = args.learning_rate
 GPU = args.gpu
 HIDDEN_UNIT = args.hidden_unit
+
+class CNNEncoder(nn.Module):
+    def __init__(self):
+        super(CNNEncoder, self).__init__()
+        self.layer1 = nn.Sequential(
+                        nn.Conv2d(1, 64, kernel_size=3, padding=0),
+                        nn.BatchNorm2d(64, momentum=1, affine=True),
+                        nn.ReLU(),
+                        nn.MaxPool2d(2))
+        self.layer2 = nn.Sequential(
+                        nn.Conv2d(64, 64, kernel_size=3, padding=0),
+                        nn.BatchNorm2d(64, momentum=1, affine=True),
+                        nn.ReLU(),
+                        nn.MaxPool2d(2))
+        self.layer3 = nn.Sequential(
+                        nn.Conv2d(64, 64, kernel_size=3, padding=1),
+                        nn.BatchNorm2d(64, momentum=1, affine=True),
+                        nn.ReLU())
+        self.layer4 = nn.Sequential(
+                        nn.Conv2d(64, 64, kernel_size=3, padding=1),
+                        nn.BatchNorm2d(64, momentum=1, affine=True),
+                        nn.ReLU())
+    
+    def forward(self, x):
+        out = self.layer1(x)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        return out
+
+class RelationNetwork(nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super(RelationNetwork, self).__init__()
+        self.layer1 = nn.Sequential(
+                        nn.Conv2d(128, 64, kernel_size=3, padding=1),
+                        nn.BatchNorm2d(64, momentum=1, affine=True),
+                        nn.ReLU(),
+                        nn.MaxPool2d(2))
+        self.layer2 = nn.Sequential(
+                        nn.Conv2d(64, 64, kernel_size=3, padding=1),
+                        nn.BatchNorm2d(64, momentum=1, affine=True),
+                        nn.ReLU(),
+                        nn.MaxPool2d(2))
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, 1)
