@@ -1,2 +1,2 @@
 # LearningToCompare_python3
-LearningToCompare python3 implement
+aim to implement "Learning To Compare" using python3
