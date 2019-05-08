@@ -73,7 +73,7 @@ class OmniglotTask(object):
 
 class FewShotDataset(Dataset):
 
-     def __init__(self, task, split='train', transform=None, target_transform=None):
+    def __init__(self, task, split='train', transform=None, target_transform=None):
         self.transform = transform
         self.target_transform = target_transform
         self.task = task
@@ -88,7 +88,8 @@ class FewShotDataset(Dataset):
         raise NotImplementedError("This is an abstract class. Subclass this class for your particular dataset.")
 
 class Omniglot(FewShotDataset):
-    def __init__(self, *args. **kwargs):
+
+    def __init__(self, *args, **kwargs):
         super(Omniglot, self).__init__(*args, **kwargs)
 
     def __getitem__(self, idx):
