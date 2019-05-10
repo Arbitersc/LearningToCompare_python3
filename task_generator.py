@@ -103,3 +103,13 @@ class Omniglot(FewShotDataset):
         if self.target_transform is not None:
             label = self.target_transform(label)
         return image, label
+
+class ClassBalancedSampler(Sampler):
+
+    def __init__(self, num_per_class, num_cl, num_inst, shuffle = True):
+        self.num_per_class = num_per_class
+        self.num_cl = num_cl
+        self.num_inst = num_inst
+        self.shuffle = shuffle
+
+    def __iter__(self):
