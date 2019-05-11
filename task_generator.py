@@ -113,3 +113,28 @@ class ClassBalancedSampler(Sampler):
         self.shuffle = shuffle
 
     def __iter__(self):
+        if self.shuffle:
+            batch = [[i+j*self.num_inst for i in torch.randperm(self.num_inst)[:self.num_per_class]] for j in range(self.num_cl)]
+        else:
+            batch = [[i+j*self.num_inst for i in range(self.num_inst)[:self.num_per_class]] for j in range(self.num_cl)]
+        batch = [item for sublist in batch for item in sublist]
+
+        if self.shuffle:
+            random.shuffle(batch)
+        return iter(batch)
+
+    def __len__(self):
+        return 1
+
+def get_data_loader(task, num_per_class=1, split='train', shuffle=True, rotation=0):
+    normalize = transform.Normalize(mean=[0.92206, 0.92206, 0.92206], std=[0.08426, 0.08426, 0.08426])
+
+    dataset = Ominiglot(task, split=split, transform=transform.Compose([Rotate(rotation),transforms.ToTensor(),normalize]))
+    
+    if split=='train':
+        sampler = ClassBalancedSampler(num_per_class, task.num_classes, task.train_num, shuffle=shuffle)
+    else:
+        sample = ClassBalancedSampler(num_per_class, task.num_classes, task.test_num, shuffle=shuffle)
+    loader = DataLoader(dataset, batch_size=num_per_class*task.num_classes,sampler=sampler)
+
+    return loader
