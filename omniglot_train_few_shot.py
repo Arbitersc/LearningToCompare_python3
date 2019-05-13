@@ -102,3 +102,83 @@ def weights_init(m):
         n = m.weight.size(1)
         m.weight.data.normal_(0, 0.01)
         m.bias.data = torch.ones(m.bias.data.size())
+
+def main():
+    #step 1: init folders
+    print("init data folders")
+    metatrain_character_folders, metatest_character_folders = tg.ominiglot_character_folders()
+    
+    #step 2: init neural networks
+    print("init neural networks")
+
+    feature_encoder = CNNEncoder()
+    relation_network = RelationNetwork(FEATURE_DIM, RELATION_DIM)
+
+    feature_encoder.apply(weights_init)
+    relation_network.apply(weights_init)
+
+    feature_encoder.cuda(GPU)
+    relation_network.cuda(GPU)
+
+    feature_encoder_optim = torch.optim.Adam(feature_encoder.parameters(), lr=LEARNING_RATE)
+    feature_encoder_scheduler = StepLR(feature_encoder_optim, step_size=100000, gamma=0.5)
+    relation_network_optim = torch.optim.Adam(relation_network.parameters(), lr=LEARNING_RATE)
+    relation_network_scheduler = StepLR(relation_network_optim, step_size=10000, gamma=0.5)
+
+    if os.path.exists(str("./models/omniglot_feature_encoder_" + str(CLASS_NUM) + "way_" + str(SAMPLE_NUM_PER_CLASS) + "shot.pkl")):
+        feature_encoder.load_state_dict(torch.load(str("./models/omniglot_feature_encoder_" + str(CLASS_NUM) + "way_" + str(SAMPLE_NUM_PER_CLASS) + "shot.pkl")))
+        print("load feature encoder success")
+    if os.path.exists(str("./models/omniglot_relation_network_"+ str(CLASS_NUM) + "way_" + str(SAMPLE_NUM_PER_CLASS) +"shot.pkl")):
+        relation_network.load_state_dict(torch.load(str("./models/omniglot_relation_network_"+ str(CLASS_NUM) + "way_" + str(SAMPLE_NUM_PER_CLASS) +"shot.pkl")))
+        print("load relation network success")
+    
+    #step 3: build graph
+    print("Training...")
+
+    last_accuracy = 0.0
+
+    for episode in range(EPISODE):
+        feature_encoder_scheduler.step(episode)
+        relation_network_scheduler.step(episode)
+
+        # init dataset
+        # sample_dataloader is to obtain previous samples for compare
+        # batch_dataloader is to batch samples for training
+        degrees = random.choice([0, 90, 180, 270])
+        task = tg.OmniglotTask(metatest_character_folders, CLASS_NUM, SAMPLE_NUM_PER_CLASS, BATCH_NUM_PER_CLASS)
+        sample_dataloader = tg.get_data_loader(task, num_per_class=SAMPLE_NUM_PER_CLASS, split="train", shuffle=False, rotation=degrees)
+        batch_dataloader = tg.get_data_loader(task, num_per_class=BATCH_NUM_PER_CLASS, split="test", shuffle=True, rotation=degrees)
+
+        # sample datas     
+        samples, sample_labels = sample_dataloader.__iter__().next()
+        batches, batch_labels = batch_dataloader.__iter__().next()
+
+        # calculate features
+        sample_features = feature_encoder(Variable(samples).cuda(GPU)) # 5x64*5*5
+        sample_features = sample_features.view(CLASS_NUM, SAMPLE_NUM_PER_CLASS,FEATURE_DIM, 5, 5)
+        sample_features = torch.sum(sample_features, 1).squeeze(1)
+        batch_features = feature_encoder(Variable(batches).cuda(GPU)) # 20x64*5*5
+
+        # calculate realations
+        # each batch sample link to every samples to calculate relations
+        # to form a 100*128 matrix for relation network
+        sample_features_ext = sample_features.unsqueeze(0).repeat(BATCH_NUM_PER_CLASS*CLASS_NUM, 1, 1, 1, 1)
+        batch_features_ext = batch_features.unsqueeze(0).repeat(CLASS_NUM, 1, 1, 1, 1)
+        batch_features_ext = torch.transpose(batch_features_ext, 0, 1)
+
+        relation_paris = torch.cat((sample_features_ext, batch_features_ext), 2).view(-1, FEATURE_DIM*2, 5, 5)
+        relations = relation_network(relation_paris).view(-1, CLASS_NUM)
+
+        mse = nn.MSELoss().cuda(GPU)
+        one_hot_labels = Variable(torch.zeros(BATCH_NUM_PER_CLASS*CLASS_NUM, CLASS_NUM).scatter_(1, batch_labels.view(-1, 1), 1)).cuda(GPU)
+        loss = mse(relations, one_hot_labels)
+
+        # training
+
+        feature_encoder.zero_grad()
+        relation_network.zero_grad()
+
+        loss.backward()
+
+        torch.nn.utils.clip_grad_norm(feature_encoder.parameters(), 0.5)
+        torch.nn.utils.clip_grad_norm(relation_network.parameters(), 0.5)
