@@ -182,3 +182,63 @@ def main():
 
         torch.nn.utils.clip_grad_norm(feature_encoder.parameters(), 0.5)
         torch.nn.utils.clip_grad_norm(relation_network.parameters(), 0.5)
+
+        feature_encoder_optim.step()
+        relation_network_optim.step()
+
+        if (episode + 1) % 100 == 0:
+            print("episode: ", episode + 1, " loss", loss.data[0])
+        
+        if (episode + 1) % 5000 == 0:
+            # test
+            print("Testing...")
+            total_rewards = 0
+
+            for i in range(TEST_EPISODE):
+                degrees = random.choice([0, 90, 180, 270])
+                task = tg.OmniglotTask(metatest_character_folders, CLASS_NUM, SAMPLE_NUM_PER_CLASS, SAMPLE_NUM_PER_CLASS)
+                sample_dataloader = tg.get_data_loader(task, num_per_class=SAMPLE_NUM_PER_CLASS, split="train", shuffle=False, rotation=degrees)
+                test_dataloader = tg.get_data_loader(task, num_per_class=SAMPLE_NUM_PER_CLASS, split="test", shuffle=True, degrees=degrees)
+                
+                sample_images, sample_labels = sample_dataloader.__iter__().next()
+                test_images, test_labels = test_dataloader.__iter__().next()
+
+                # calculate features
+                sample_features = feature_encoder(Variable(sample_images).cuda(GPU))
+                sample_features = sample_features.view(CLASS_NUM, SAMPLE_NUM_PER_CLASS, FEATURE_DIM, 5, 5)
+                sample_features = torch.sum(sample_features, 1).squeeze(1)
+                test_features = feature_encoder(Variable(test_images).cuda(GPU))
+
+                # calculate relations
+                # each batch sample link to every samples to calculate relations
+                # to form a 100*128 matrix for relation network
+                sample_features_ext = sample_features.unsqueeze(0).repeat(SAMPLE_NUM_PER_CLASS*CLASS_NUM, 1, 1, 1, 1)
+                test_features_ext = test_features.unsqueeze(0).repeat(CLASS_NUM, 1, 1, 1, 1)
+                test_features_ext = torch.transpose(test_features_ext, 0, 1)
+
+                relation_pairs = torch.cat((sample_features_ext, test_features_ext), 2).view(-1, FEATURE_DIM*2, 5, 5)
+                relations = relation_network(relation_pairs).view(-1, CLASS_NUM)
+
+                _, predict_labels = torch.max(relations.data, 1)
+                rewards = [1 if predict_labels[j] == test_labels[j] else 0 for j in range(CLASS_NUM*SAMPLE_NUM_PER_CLASS)]
+
+                total_rewards += np.sum(rewards)
+
+            test_accuracy = total_rewards/1.0/CLASS_NUM/SAMPLE_NUM_PER_CLASS/TEST_EPISODE
+
+            print("test accuracy:", test_accuracy)
+
+            if test_accuracy > last_accuracy:
+
+                # save network
+                torch.save(feature_encoder.state_dict(), str("./models/omniglot_feature_encoder_" + str(CLASS_NUM) +"way_" + str(SAMPLE_NUM_PER_CLASS) +"shot.pkl"))
+                torch.save(relation_network.state_dict(), str("./models/omniglot_relation_network_"+ str(CLASS_NUM) +"way_" + str(SAMPLE_NUM_PER_CLASS) +"shot.pkl"))
+
+                print("save networks for episode:", episode)
+
+                last_accuracy = test_accuracy
+
+    
+
+if __name__ == '__main__':
+    main()
