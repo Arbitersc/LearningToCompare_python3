@@ -26,14 +26,21 @@ class Rotate(object):
         return x
 
 def ominiglot_character_folders():
-    data_folder = '../datas/omniglot_resized/'
+    data_folder = './datas/omniglot_resized/'
 
     character_folders = [os.path.join(data_folder, family, character) \
                 for family in os.listdir(data_folder) \
                 if os.path.isdir(os.path.join(data_folder, family)) \
-                for character in os.listdir(os.path.join(data_folder, family))]
+                for character in os.listdir(os.path.join(data_folder, family))\
+                if os.path.isdir(os.path.join(data_folder, family, character))]
     random.seed(1)
     random.shuffle(character_folders)
+
+    fileObject = open('Dirlist.txt', 'w')
+    for ip in character_folders:
+        fileObject.write(ip)
+        fileObject.write('\n')
+    fileObject.close()
 
     num_train = 1200
     metatrain_character_folder = character_folders[:num_train]
@@ -48,8 +55,10 @@ class OmniglotTask(object):
         self.train_num = train_num
         self.test_num = test_num
 
+
         # 随机取样类别
         class_folders = random.sample(self.character_folders, self.num_classes)
+        # print("class_folders", class_folders)
         labels = np.array(range(len(class_folders)))
         labels = dict(zip(class_folders, labels))
         samples = dict()
@@ -57,7 +66,7 @@ class OmniglotTask(object):
         self.train_roots = []
         self.test_roots = []
         for c in class_folders:
-
+            # print("c", os.listdir(c))
             # 随机取样类别中的样本
             temp = [os.path.join(c, x) for x in os.listdir(c)]
             samples[c] = random.sample(temp, len(temp))
@@ -69,7 +78,8 @@ class OmniglotTask(object):
         self.test_labels = [labels[self.get_class(x)] for x in self.test_roots]
 
     def get_class(self, sample):
-        return os.path.join(*sample.split('/'[:-1]))
+        return os.path.join(*sample.split('/')[:-1])
+
 
 class FewShotDataset(Dataset):
 
@@ -134,7 +144,7 @@ def get_data_loader(task, num_per_class=1, split='train', shuffle=True, rotation
     if split=='train':
         sampler = ClassBalancedSampler(num_per_class, task.num_classes, task.train_num, shuffle=shuffle)
     else:
-        sample = ClassBalancedSampler(num_per_class, task.num_classes, task.test_num, shuffle=shuffle)
+        sampler = ClassBalancedSampler(num_per_class, task.num_classes, task.test_num, shuffle=shuffle)
     loader = DataLoader(dataset, batch_size=num_per_class*task.num_classes,sampler=sampler)
 
     return loader

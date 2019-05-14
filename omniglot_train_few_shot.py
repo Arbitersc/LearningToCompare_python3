@@ -85,7 +85,7 @@ class RelationNetwork(nn.Module):
         out = self.layer2(out)
         out = out.view(out.size(0), -1)
         out = F.relu(self.fc1(out))
-        out = F.sigmoid(self.fc2(out))
+        out = torch.sigmoid(self.fc2(out))
         return out
 
 def weights_init(m):
@@ -96,7 +96,7 @@ def weights_init(m):
         if m.bias is not None:
             m.bias.data.zero_()
     elif classname.find('BatchNorm') != -1:
-        m.weight.data.fill(1)
+        m.weight.data.fill_(1)
         m.bias.data.zero_()
     elif classname.find('Linear') != -1:
         n = m.weight.size(1)
@@ -145,6 +145,7 @@ def main():
         # sample_dataloader is to obtain previous samples for compare
         # batch_dataloader is to batch samples for training
         degrees = random.choice([0, 90, 180, 270])
+
         task = tg.OmniglotTask(metatest_character_folders, CLASS_NUM, SAMPLE_NUM_PER_CLASS, BATCH_NUM_PER_CLASS)
         sample_dataloader = tg.get_data_loader(task, num_per_class=SAMPLE_NUM_PER_CLASS, split="train", shuffle=False, rotation=degrees)
         batch_dataloader = tg.get_data_loader(task, num_per_class=BATCH_NUM_PER_CLASS, split="test", shuffle=True, rotation=degrees)
@@ -180,14 +181,14 @@ def main():
 
         loss.backward()
 
-        torch.nn.utils.clip_grad_norm(feature_encoder.parameters(), 0.5)
-        torch.nn.utils.clip_grad_norm(relation_network.parameters(), 0.5)
+        torch.nn.utils.clip_grad_norm_(feature_encoder.parameters(), 0.5)
+        torch.nn.utils.clip_grad_norm_(relation_network.parameters(), 0.5)
 
         feature_encoder_optim.step()
         relation_network_optim.step()
 
         if (episode + 1) % 100 == 0:
-            print("episode: ", episode + 1, " loss", loss.data[0])
+            print("episode: ", episode + 1, " loss", loss.item())
         
         if (episode + 1) % 5000 == 0:
             # test
@@ -198,7 +199,7 @@ def main():
                 degrees = random.choice([0, 90, 180, 270])
                 task = tg.OmniglotTask(metatest_character_folders, CLASS_NUM, SAMPLE_NUM_PER_CLASS, SAMPLE_NUM_PER_CLASS)
                 sample_dataloader = tg.get_data_loader(task, num_per_class=SAMPLE_NUM_PER_CLASS, split="train", shuffle=False, rotation=degrees)
-                test_dataloader = tg.get_data_loader(task, num_per_class=SAMPLE_NUM_PER_CLASS, split="test", shuffle=True, degrees=degrees)
+                test_dataloader = tg.get_data_loader(task, num_per_class=SAMPLE_NUM_PER_CLASS, split="test", shuffle=True, rotation=degrees)
                 
                 sample_images, sample_labels = sample_dataloader.__iter__().next()
                 test_images, test_labels = test_dataloader.__iter__().next()
